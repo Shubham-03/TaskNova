@@ -112,6 +112,12 @@
                 </div>
 
                 <!-- Right: Workspace + Theme + New Task -->
+                <!-- Sync Status Pill -->
+                <div id="sync-status" class="sync-pill sync-online" title="Sync status">
+                    <span id="sync-dot" class="sync-dot"></span>
+                    <span id="sync-label" class="hidden sm:inline">Online</span>
+                </div>
+
                 <div class="ml-auto flex items-center gap-2 sm:gap-3">
                     <select id="workspace-select"
                         class="hidden sm:block bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 cursor-pointer text-slate-700 dark:text-slate-200 font-semibold transition-colors">
@@ -369,7 +375,12 @@
     <!-- Toast container -->
     <div id="toast-container"></div>
 
-    <script src="app.js"></script>
+    <script>
+        // Load sync.js and app.js with cache-busting so browser always picks up latest credentials
+        const _v = Date.now();
+        document.write(`<script src="sync.js?v=${_v}"><\/script>`);
+        document.write(`<script src="app.js?v=${_v}"><\/script>`);
+    </script>
 </body>
 
 </html>

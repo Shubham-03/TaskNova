@@ -1,5 +1,6 @@
 /**
  * TaskNova - Core Application Logic
+ * Offline-first: IndexedDB is the primary store; Supabase is synced via sync.js
  */
 
 const App = {
@@ -21,39 +22,107 @@ const App = {
         isTimerRunning: false,
     },
 
-    // 2. Initialization
-    init() {
-        this.loadState();
+    // 2. Initialization (async — waits for IDB to be ready)
+    async init() {
+        // SyncManager.init() opens IDB; we must await it before any IDB reads
+        await SyncManager.init();
+        await this.loadState();
         this.cacheDOM();
         this.bindEvents();
         this.initTheme();
         this.initSortable();
         this.updateStreak();
-        this.initViews(); // ← Initialize all views hidden first
+        this.initViews();
         this.renderAll();
     },
 
-    // Load from LocalStorage
-    loadState() {
-        const savedTasks = localStorage.getItem('tasknova_tasks');
-        const savedGami = localStorage.getItem('tasknova_gami');
-        const savedWorkspace = localStorage.getItem('tasknova_workspace');
-
-        if (savedTasks) this.state.tasks = JSON.parse(savedTasks);
-        else {
-            // Demo data
-            this.state.tasks = [
-                { id: 't1', title: 'Welcome to TaskNova! 👋', desc: 'Drag me to "In Progress" to try it out.', status: 'todo', priority: 'high', deadline: this.getTodayDate(), tags: ['Onboarding'], workspace: 'personal', pinned: true, completed: false }
-            ];
-            this.saveTasks();
+    // ── Load state from IndexedDB (primary) ──────────────────────
+    async loadState() {
+        // One-time migration: if localStorage has tasks, import them to IDB
+        const lsRaw = localStorage.getItem('tasknova_tasks');
+        if (lsRaw) {
+            try {
+                const lsTasks = JSON.parse(lsRaw);
+                const now = new Date().toISOString();
+                const migrated = lsTasks.map(t => ({
+                    ...t,
+                    updatedAt: t.updatedAt || t.createdAt || now,
+                    synced: false,
+                    deleted: t.deleted || false,
+                }));
+                await DB.bulkPut(migrated);
+                localStorage.removeItem('tasknova_tasks');
+                console.log('[App] Migrated tasks from localStorage → IndexedDB');
+            } catch (e) {
+                console.warn('[App] Migration from localStorage failed:', e);
+            }
         }
-        
-        if (savedGami) this.state.gamification = JSON.parse(savedGami);
-        if (savedWorkspace) this.state.workspace = savedWorkspace;
+
+        // Read all tasks from IDB (exclude soft-deleted)
+        const allTasks = await DB.getAll();
+        this.state.tasks = allTasks.filter(t => !t.deleted);
+
+        // First-run demo data
+        if (!this.state.tasks.length) {
+            const demoTask = {
+                id: 't1',
+                title: 'Welcome to TaskNova! 👋',
+                desc: 'Drag me to "In Progress" to try it out.',
+                status: 'todo',
+                priority: 'high',
+                deadline: this.getTodayDate(),
+                tags: ['Onboarding'],
+                workspace: 'personal',
+                pinned: true,
+                completed: false,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                synced: false,
+                deleted: false,
+            };
+            await DB.put(demoTask);
+            this.state.tasks = [demoTask];
+        }
+
+        // Gamification & workspace from localStorage (small, no sync needed)
+        const savedGami      = localStorage.getItem('tasknova_gami');
+        const savedWorkspace = localStorage.getItem('tasknova_workspace');
+        if (savedGami)      this.state.gamification = JSON.parse(savedGami);
+        if (savedWorkspace) this.state.workspace    = savedWorkspace;
     },
 
-    saveTasks() {
-        localStorage.setItem('tasknova_tasks', JSON.stringify(this.state.tasks));
+    // ── Reload tasks from IDB (called by SyncManager after a pull) ──
+    async reloadFromIDB() {
+        const allTasks    = await DB.getAll();
+        this.state.tasks  = allTasks.filter(t => !t.deleted);
+        this.renderBoard();
+        this.renderDashboard();
+    },
+
+    // ── Persist a single task to IDB + trigger sync ───────────────
+    async _saveTask(task) {
+        const now = new Date().toISOString();
+        const updated = { ...task, updatedAt: now, synced: false };
+        // Update in-memory reference too
+        const idx = this.state.tasks.findIndex(t => t.id === updated.id);
+        if (idx !== -1) this.state.tasks[idx] = updated;
+        await DB.put(updated);
+        SyncManager.triggerSync();
+        return updated;
+    },
+
+    // ── Legacy-compat stub (some internal callers still use saveTasks)
+    async saveTasks() {
+        // Batch-write all in-memory tasks to IDB and mark unsynced
+        const now = new Date().toISOString();
+        const tasks = this.state.tasks.map(t => ({
+            ...t,
+            updatedAt: t.updatedAt || now,
+            synced:    false,
+            deleted:   t.deleted || false,
+        }));
+        await DB.bulkPut(tasks);
+        SyncManager.triggerSync();
     },
 
     saveGami() {
@@ -137,7 +206,6 @@ const App = {
                 e.preventDefault();
                 const view = item.dataset.view;
                 this.switchView(view);
-                // Close sidebar on mobile after nav
                 this.closeMobileSidebar();
             });
         });
@@ -157,7 +225,6 @@ const App = {
         const onWorkspaceChange = (e) => {
             this.state.workspace = e.target.value;
             localStorage.setItem('tasknova_workspace', this.state.workspace);
-            // Sync both selects
             if (this.dom.workspaceSelect) this.dom.workspaceSelect.value = this.state.workspace;
             if (this.dom.workspaceSelectMobile) this.dom.workspaceSelectMobile.value = this.state.workspace;
             this.renderAll();
@@ -175,7 +242,6 @@ const App = {
         }
         this.dom.btnModalClose.addEventListener('click', () => this.closeModal());
         this.dom.btnModalCancel.addEventListener('click', () => this.closeModal());
-        // Close modal on backdrop click
         this.dom.modal.addEventListener('click', (e) => {
             if (e.target === this.dom.modal) this.closeModal();
         });
@@ -222,7 +288,7 @@ const App = {
         if (this.dom.overlay) this.dom.overlay.classList.remove('active');
     },
 
-    // 5. Core Methods
+    // 5. Theme
     initTheme() {
         if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
             document.documentElement.classList.add('dark');
@@ -243,11 +309,7 @@ const App = {
 
     toggleTheme() {
         document.documentElement.classList.toggle('dark');
-        if (document.documentElement.classList.contains('dark')) {
-            localStorage.setItem('theme', 'dark');
-        } else {
-            localStorage.setItem('theme', 'light');
-        }
+        localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
         this.syncThemeIcon();
     },
 
@@ -262,26 +324,21 @@ const App = {
             const el = document.getElementById(id);
             if (el) el.style.display = 'none';
         });
-        // Show board by default
         const board = document.getElementById('view-board');
         if (board) board.style.display = 'flex';
         this._activeViewDisplay = viewMap;
     },
 
     switchView(viewName) {
-        // Hide all views
         const viewIds = ['view-board', 'view-dashboard', 'view-focus'];
         viewIds.forEach(id => {
             const el = document.getElementById(id);
             if (el) el.style.display = 'none';
         });
-
-        // Show target
         const displayMap = { board: 'flex', dashboard: 'block', focus: 'flex' };
         const target = document.getElementById(`view-${viewName}`);
         if (target) target.style.display = displayMap[viewName] || 'block';
 
-        // Sync ALL nav items (sidebar + bottom-nav) with same data-view attr
         document.querySelectorAll('[data-view]').forEach(el => {
             el.classList.remove('is-active');
             if (el.dataset.view === viewName) el.classList.add('is-active');
@@ -296,30 +353,28 @@ const App = {
             animation: 150,
             ghostClass: 'sortable-ghost',
             dragClass: 'sortable-drag',
-            onEnd: (evt) => {
-                const itemEl = evt.item;
-                const taskId = itemEl.dataset.id;
+            onEnd: async (evt) => {
+                const itemEl  = evt.item;
+                const taskId  = itemEl.dataset.id;
                 const newStatus = evt.to.dataset.status;
                 const oldStatus = evt.from.dataset.status;
-                
+
                 const task = this.state.tasks.find(t => t.id === taskId);
-                if(task && newStatus !== oldStatus) {
+                if (task && newStatus !== oldStatus) {
                     task.status = newStatus;
-                    this.saveTasks();
-                    this.updateCounts();
-                    
-                    // Gamification: moving to done = points
+
                     if (newStatus === 'done' && oldStatus !== 'done') {
-                        this.awardPoints(10, 'Task Completed! +10 Points');
                         task.completed = true;
-                        if(this.state.focusTask && this.state.focusTask.id === task.id) {
+                        this.awardPoints(10, 'Task Completed! +10 Points');
+                        if (this.state.focusTask && this.state.focusTask.id === task.id) {
                             this.resetFocusTimer();
                         }
                     } else if (oldStatus === 'done' && newStatus !== 'done') {
-                        // Moved back out of done
                         task.completed = false;
                     }
-                    this.saveTasks();
+
+                    await this._saveTask(task);
+                    this.updateCounts();
                     this.renderBoard();
                 }
             }
@@ -338,21 +393,19 @@ const App = {
     },
 
     renderBoard(searchQuery = '') {
-        // Clear cols
         Object.values(this.dom.cols).forEach(col => col.innerHTML = '');
-        
-        let filteredTasks = this.state.tasks.filter(t => t.workspace === this.state.workspace);
-        
+
+        let filteredTasks = this.state.tasks.filter(t => t.workspace === this.state.workspace && !t.deleted);
+
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
-            filteredTasks = filteredTasks.filter(t => 
-                t.title.toLowerCase().includes(query) || 
+            filteredTasks = filteredTasks.filter(t =>
+                t.title.toLowerCase().includes(query) ||
                 (t.desc && t.desc.toLowerCase().includes(query)) ||
                 (t.tags && t.tags.some(tag => tag.toLowerCase().includes(query)))
             );
         }
 
-        // Sort by priority (high > med > low) and then by pinned
         const priorityScore = { high: 3, medium: 2, low: 1 };
         filteredTasks.sort((a, b) => {
             if (a.pinned !== b.pinned) return b.pinned ? 1 : -1;
@@ -361,7 +414,7 @@ const App = {
 
         filteredTasks.forEach(task => {
             const el = this.createTaskCard(task);
-            if(task.status && this.dom.cols[task.status]) {
+            if (task.status && this.dom.cols[task.status]) {
                 this.dom.cols[task.status].appendChild(el);
             }
         });
@@ -372,14 +425,13 @@ const App = {
     updateCounts() {
         const counts = { todo: 0, inprogress: 0, done: 0 };
         this.state.tasks.forEach(t => {
-            if (t.workspace === this.state.workspace && counts[t.status] !== undefined) {
+            if (t.workspace === this.state.workspace && !t.deleted && counts[t.status] !== undefined) {
                 counts[t.status]++;
             }
         });
-        
-        this.dom.counts.todo.textContent = counts.todo;
+        this.dom.counts.todo.textContent      = counts.todo;
         this.dom.counts.inprogress.textContent = counts.inprogress;
-        this.dom.counts.done.textContent = counts.done;
+        this.dom.counts.done.textContent      = counts.done;
     },
 
     createTaskCard(task) {
@@ -387,35 +439,38 @@ const App = {
         card.className = `task-card p-3 sm:p-4 rounded-xl shadow-sm mb-2 relative group ${task.completed ? 'completed' : ''}`;
         card.dataset.id = task.id;
 
-        const priorityColors = {
-            low: 'badge-low',
-            medium: 'badge-medium',
-            high: 'badge-high'
-        };
+        const priorityColors = { low: 'badge-low', medium: 'badge-medium', high: 'badge-high' };
         const pColor = priorityColors[task.priority] || priorityColors.medium;
-        
-        const tagsHtml = task.tags ? task.tags.map(tag => 
+
+        const tagsHtml = task.tags ? task.tags.map(tag =>
             `<span class="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800/50">${tag.trim()}</span>`
         ).join('') : '';
 
-        const deadlineHtml = task.deadline ? 
+        const deadlineHtml = task.deadline ?
             `<div class="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 font-medium">
                 <i class="fa-regular fa-clock"></i> <span>${this.formatDate(task.deadline)}</span>
             </div>` : '';
 
-        const pinIcon = task.pinned ? '<i class="fa-solid fa-thumbtack text-primary text-xs transform rotate-45"></i>' : '<i class="fa-solid fa-thumbtack text-slate-300 dark:text-slate-600 text-xs"></i>';
+        const pinIcon = task.pinned
+            ? '<i class="fa-solid fa-thumbtack text-primary text-xs transform rotate-45"></i>'
+            : '<i class="fa-solid fa-thumbtack text-slate-300 dark:text-slate-600 text-xs"></i>';
+
+        // Sync indicator dot: grey = unsynced, faint = synced
+        const syncDot = task.synced === false
+            ? `<span title="Pending sync" class="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 ml-1 flex-shrink-0"></span>`
+            : '';
 
         card.innerHTML = `
             <div class="flex justify-between items-start mb-2 gap-2">
                 <div class="flex items-start gap-3 w-full">
                     <input type="checkbox" class="task-checkbox mt-1 w-4 h-4 rounded text-primary focus:ring-primary dark:bg-slate-700 border-slate-300 dark:border-slate-600 cursor-pointer" ${task.completed || task.status === 'done' ? 'checked' : ''}>
                     <div class="flex-1 min-w-0">
-                        <h4 class="task-title font-semibold text-slate-800 dark:text-slate-200 text-sm break-words leading-tight">${task.title}</h4>
+                        <h4 class="task-title font-semibold text-slate-800 dark:text-slate-200 text-sm break-words leading-tight flex items-center gap-1">${task.title}${syncDot}</h4>
                         ${task.desc ? `<p class="mt-1 text-xs text-slate-500 dark:text-slate-400 line-clamp-2">${task.desc}</p>` : ''}
                     </div>
                 </div>
             </div>
-            
+
             <div class="flex flex-wrap gap-1.5 mb-3 px-7">
                 <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-md uppercase tracking-widest ${pColor}">${task.priority}</span>
                 ${tagsHtml}
@@ -450,11 +505,11 @@ const App = {
         if (task) {
             this.dom.modalTitle.textContent = 'Edit Task';
             this.state.editingTaskId = task.id;
-            this.dom.taskTitle.value = task.title;
-            this.dom.taskDesc.value = task.desc || '';
+            this.dom.taskTitle.value    = task.title;
+            this.dom.taskDesc.value     = task.desc || '';
             this.dom.taskPriority.value = task.priority;
-            this.dom.taskDate.value = task.deadline || '';
-            this.dom.taskTags.value = task.tags ? task.tags.join(', ') : '';
+            this.dom.taskDate.value     = task.deadline || '';
+            this.dom.taskTags.value     = task.tags ? task.tags.join(', ') : '';
         } else {
             this.dom.modalTitle.textContent = 'New Task';
             this.state.editingTaskId = null;
@@ -471,9 +526,9 @@ const App = {
         this.state.editingTaskId = null;
     },
 
-    saveTaskFromForm() {
-        const title = this.dom.taskTitle.value.trim();
-        const desc = this.dom.taskDesc.value.trim();
+    async saveTaskFromForm() {
+        const title    = this.dom.taskTitle.value.trim();
+        const desc     = this.dom.taskDesc.value.trim();
         const priority = this.dom.taskPriority.value;
         const deadline = this.dom.taskDate.value;
         const tagsInput = this.dom.taskTags.value;
@@ -484,46 +539,57 @@ const App = {
         if (this.state.editingTaskId) {
             const task = this.state.tasks.find(t => t.id === this.state.editingTaskId);
             if (task) {
-                task.title = title;
-                task.desc = desc;
+                task.title    = title;
+                task.desc     = desc;
                 task.priority = priority;
                 task.deadline = deadline;
-                task.tags = tags;
+                task.tags     = tags;
+                await this._saveTask(task);
                 this.showToast('Task updated successfully', 'success');
             }
         } else {
             const newTask = {
-                id: 't_' + Date.now().toString(),
+                id:        't_' + Date.now().toString(),
                 title,
                 desc,
                 priority,
                 deadline,
                 tags,
-                status: 'todo',
+                status:    'todo',
                 workspace: this.state.workspace,
-                pinned: false,
+                pinned:    false,
                 completed: false,
-                createdAt: new Date().toISOString()
+                deleted:   false,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                synced:    false,
             };
             this.state.tasks.push(newTask);
+            await DB.put(newTask);
+            SyncManager.triggerSync();
             this.showToast('New task added', 'success');
         }
 
-        this.saveTasks();
         this.renderBoard();
         this.closeModal();
     },
 
-    deleteTask(id) {
-        if(confirm('Are you sure you want to delete this task?')) {
+    async deleteTask(id) {
+        if (confirm('Are you sure you want to delete this task?')) {
+            const task = this.state.tasks.find(t => t.id === id);
+            if (task) {
+                // Soft-delete: mark deleted + unsynced so Supabase learns about it
+                task.deleted = true;
+                await this._saveTask(task);
+            }
+            // Remove from in-memory list so it's hidden immediately
             this.state.tasks = this.state.tasks.filter(t => t.id !== id);
-            this.saveTasks();
             this.renderBoard();
             this.showToast('Task deleted', 'info');
-            
-            if(this.state.focusTask && this.state.focusTask.id === id) {
+
+            if (this.state.focusTask && this.state.focusTask.id === id) {
                 this.resetFocusTimer();
-                this.dom.focusTitle.textContent = "No task selected for focus.";
+                this.dom.focusTitle.textContent = 'No task selected for focus.';
                 this.state.focusTask = null;
             }
         }
@@ -531,29 +597,29 @@ const App = {
 
     editTask(id) {
         const task = this.state.tasks.find(t => t.id === id);
-        if(task) this.openModal(task);
+        if (task) this.openModal(task);
     },
 
-    togglePin(id) {
+    async togglePin(id) {
         const task = this.state.tasks.find(t => t.id === id);
-        if(task) {
+        if (task) {
             task.pinned = !task.pinned;
-            this.saveTasks();
+            await this._saveTask(task);
             this.renderBoard();
         }
     },
 
-    toggleTaskCompletion(id, isCompleted) {
+    async toggleTaskCompletion(id, isCompleted) {
         const task = this.state.tasks.find(t => t.id === id);
-        if(task) {
+        if (task) {
             task.completed = isCompleted;
             if (isCompleted && task.status !== 'done') {
                 task.status = 'done';
                 this.awardPoints(10, 'Task Completed! +10 Points');
             } else if (!isCompleted && task.status === 'done') {
-                task.status = 'todo'; // Or inprogress
+                task.status = 'todo';
             }
-            this.saveTasks();
+            await this._saveTask(task);
             this.renderBoard();
         }
     },
@@ -561,22 +627,19 @@ const App = {
     // 8. Focus Mode
     setFocusTask(id) {
         const task = this.state.tasks.find(t => t.id === id);
-        if(task) {
+        if (task) {
             this.state.focusTask = task;
             this.dom.focusTitle.textContent = task.title;
-            
-            // Switch to focus view
             document.querySelector('[data-view="focus"]').click();
             this.resetFocusTimer();
         }
     },
 
     toggleFocusTimer() {
-        if(!this.state.focusTask) {
+        if (!this.state.focusTask) {
             this.showToast('Please select a task from the board first', 'error');
             return;
         }
-
         if (this.state.isTimerRunning) {
             clearInterval(this.state.focusTimer);
             this.state.isTimerRunning = false;
@@ -584,14 +647,10 @@ const App = {
         } else {
             this.state.isTimerRunning = true;
             this.dom.focusStartBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
-            
             this.state.focusTimer = setInterval(() => {
                 this.state.timeLeft--;
                 this.updateFocusDisplay();
-                
-                if(this.state.timeLeft <= 0) {
-                    this.completeFocusSession();
-                }
+                if (this.state.timeLeft <= 0) this.completeFocusSession();
             }, 1000);
         }
     },
@@ -599,7 +658,7 @@ const App = {
     resetFocusTimer() {
         clearInterval(this.state.focusTimer);
         this.state.isTimerRunning = false;
-        this.state.timeLeft = 25 * 60; // 25 mins
+        this.state.timeLeft = 25 * 60;
         this.dom.focusStartBtn.innerHTML = '<i class="fa-solid fa-play ml-1"></i>';
         this.updateFocusDisplay();
     },
@@ -607,10 +666,8 @@ const App = {
     updateFocusDisplay() {
         const m = Math.floor(this.state.timeLeft / 60);
         const s = this.state.timeLeft % 60;
-        this.dom.focusTime.textContent = `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+        this.dom.focusTime.textContent = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 
-        // Circle uses percentage-based r="46%" → actual circumference depends on rendered size
-        // We compute dynamically from the SVG element itself
         const circle = this.dom.focusCircle;
         const r = circle.r?.baseVal?.value || 133;
         const circumference = 2 * Math.PI * r;
@@ -624,33 +681,22 @@ const App = {
         clearInterval(this.state.focusTimer);
         this.state.isTimerRunning = false;
         this.dom.focusStartBtn.innerHTML = '<i class="fa-solid fa-play ml-1"></i>';
-        
-        // Play notification sound? Not natively without audio file, just show toast
         this.showToast('Focus session completed! Awesome job.', 'success');
         this.awardPoints(25, 'Deep Work Session! +25 Points');
-        
-        // Reset timer
         this.state.timeLeft = 25 * 60;
         this.updateFocusDisplay();
     },
 
     // 9. Gamification & Dashboard
     updateStreak() {
-        const today = this.getTodayDate();
+        const today   = this.getTodayDate();
         const lastLogin = this.state.gamification.lastLoginDate;
-        
         if (lastLogin !== today) {
             if (lastLogin) {
                 const yesterday = new Date();
                 yesterday.setDate(yesterday.getDate() - 1);
                 const yesterdayStr = yesterday.toISOString().split('T')[0];
-                
-                if (lastLogin === yesterdayStr) {
-                    // Logged in yesterday, streak continues! 
-                    // Actually we shouldn't bump just for login, bump on first task completion.
-                    // But for simplicity, we keep the streak alive.
-                } else {
-                    // Streak broke
+                if (lastLogin !== yesterdayStr) {
                     this.state.gamification.streak = 0;
                 }
             }
@@ -660,62 +706,50 @@ const App = {
     },
 
     awardPoints(pts, msg) {
-        this.state.gamification.points += pts;
+        this.state.gamification.points         += pts;
         this.state.gamification.tasksCompleted += 1;
-        
-        // Also update streak if it's the first task today
-        // Simulating:
-        this.state.gamification.streak = Math.max(1, this.state.gamification.streak);
-        
+        this.state.gamification.streak          = Math.max(1, this.state.gamification.streak);
         this.saveGami();
         this.updateGamificationWidget();
-        this.renderDashboard(); // if active
-        
-        if(msg) this.showToast(msg, 'success');
+        this.renderDashboard();
+        if (msg) this.showToast(msg, 'success');
     },
 
     updateGamificationWidget() {
-        const currentPoints = this.state.gamification.points;
-        const level = Math.floor(currentPoints / 100) + 1;
-        const pointsInLevel = currentPoints % 100;
-        
-        this.dom.wlLevel.textContent = level;
+        const currentPoints  = this.state.gamification.points;
+        const level          = Math.floor(currentPoints / 100) + 1;
+        const pointsInLevel  = currentPoints % 100;
+        this.dom.wlLevel.textContent  = level;
         this.dom.wlPoints.textContent = pointsInLevel;
         this.dom.wlStreak.textContent = this.state.gamification.streak;
-        
-        const progressPercent = (pointsInLevel / 100) * 100;
-        this.dom.wlProgress.style.width = `${progressPercent}%`;
+        this.dom.wlProgress.style.width = `${(pointsInLevel / 100) * 100}%`;
     },
 
     renderDashboard() {
-        const totalCompleted = this.state.gamification.tasksCompleted || this.state.tasks.filter(t => t.completed || t.status === 'done').length;
+        const totalCompleted = this.state.gamification.tasksCompleted ||
+            this.state.tasks.filter(t => t.completed || t.status === 'done').length;
         this.dom.dashCompleted.textContent = totalCompleted;
-        this.dom.dashStreak.textContent = this.state.gamification.streak;
-        this.dom.dashPoints.textContent = this.state.gamification.points;
+        this.dom.dashStreak.textContent    = this.state.gamification.streak;
+        this.dom.dashPoints.textContent    = this.state.gamification.points;
     },
 
     // 10. Utils
     showToast(message, type = 'info') {
         const container = document.getElementById('toast-container');
-        const toast = document.createElement('div');
-        
+        const toast     = document.createElement('div');
         const colors = {
             success: 'bg-emerald-500 text-white',
-            error: 'bg-red-500 text-white',
-            info: 'bg-slate-800 dark:bg-slate-700 text-white'
+            error:   'bg-red-500 text-white',
+            info:    'bg-slate-800 dark:bg-slate-700 text-white'
         };
-        
         const icons = {
             success: '<i class="fa-solid fa-check-circle"></i>',
-            error: '<i class="fa-solid fa-exclamation-circle"></i>',
-            info: '<i class="fa-solid fa-info-circle"></i>'
+            error:   '<i class="fa-solid fa-exclamation-circle"></i>',
+            info:    '<i class="fa-solid fa-info-circle"></i>'
         };
-
         toast.className = `flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl font-medium text-sm toast-enter ${colors[type]} pointer-events-auto`;
         toast.innerHTML = `${icons[type]} <span>${message}</span>`;
-        
         container.appendChild(toast);
-        
         setTimeout(() => {
             toast.classList.remove('toast-enter');
             toast.classList.add('toast-exit');
@@ -728,6 +762,9 @@ const App = {
         return new Date(dateString).toLocaleDateString('en-US', options);
     }
 };
+
+// Expose App globally so SyncManager.pullFromSupabase() can trigger re-renders
+window.App = App;
 
 // Start the app when DOM loads
 document.addEventListener('DOMContentLoaded', () => App.init());
