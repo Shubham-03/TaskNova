@@ -1,0 +1,545 @@
+/* ==========================================
+   TaskNova - Custom Styles (Responsive)
+   Font: Plus Jakarta Sans + Inter
+   Mobile-first responsive design
+   ========================================== */
+
+* { box-sizing: border-box; }
+
+body {
+    font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* ==========================================
+   PAGE BACKGROUND
+   ========================================== */
+.page-bg { background: #f1f5f9; }
+.dark .page-bg { background: #0f172a; }
+
+/* ==========================================
+   GLASSMORPHISM
+   ========================================== */
+.glass-panel {
+    background: rgba(255, 255, 255, 0.98);
+    border-color: #e2e8f0;
+}
+.dark .glass-panel {
+    background: rgba(30, 41, 59, 0.88);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-color: rgba(255, 255, 255, 0.06);
+}
+.glass-column { background: #ffffff; }
+.dark .glass-column {
+    background: rgba(22, 33, 54, 0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+/* ==========================================
+   VIEW SECTIONS (JS-controlled display)
+   ========================================== */
+.view-section {
+    width: 100%;
+    animation: fadeSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+@keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ==========================================
+   CUSTOM SCROLLBAR
+   ========================================== */
+.custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.2); border-radius: 10px; }
+.dark .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.35); }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,0.5); }
+
+/* ==========================================
+   SIDEBAR — Desktop fixed, Mobile overlay
+   ========================================== */
+#sidebar {
+    display: none;           /* hidden on mobile by default */
+    flex-direction: column;
+    width: 240px;
+    min-width: 240px;
+    background: #ffffff;
+    border-right: 1px solid #e2e8f0;
+    height: 100vh;
+    position: fixed;
+    left: 0; top: 0;
+    z-index: 100;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.dark #sidebar {
+    background: #0f172a;
+    border-right-color: rgba(255,255,255,0.06);
+}
+
+/* Mobile: sidebar as slide-over when open */
+#sidebar.mobile-open {
+    display: flex;
+    transform: translateX(0);
+}
+
+/* Tablet+: always visible, push content */
+@media (min-width: 768px) {
+    #sidebar {
+        display: flex;
+        position: relative;
+        height: auto;
+        min-height: 100%;
+        width: 220px;
+        min-width: 220px;
+        border-right: 1px solid #e2e8f0;
+        box-shadow: none;
+        margin: 12px 0 12px 12px;
+        border-radius: 16px;
+        border: 1px solid #e2e8f0;
+    }
+    .dark #sidebar { border-color: rgba(255,255,255,0.06); }
+    
+    #mobile-nav-overlay { display: none !important; }
+    #bottom-nav { display: none !important; }
+}
+
+/* Sidebar overlay (mobile) */
+#mobile-nav-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.4);
+    z-index: 99;
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+}
+#mobile-nav-overlay.active { display: block; }
+
+/* ==========================================
+   NAV ITEMS
+   ========================================== */
+.nav-item {
+    color: #64748b;
+    border-left: 3px solid transparent;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    transition: all 0.18s ease;
+}
+.nav-item:hover { color: #6366f1; background: rgba(99,102,241,0.07); border-left-color: rgba(99,102,241,0.3); }
+.nav-item.is-active {
+    background: linear-gradient(90deg, rgba(99,102,241,0.1) 0%, transparent 100%);
+    border-left: 3px solid #6366f1;
+    color: #6366f1;
+    font-weight: 600;
+}
+.dark .nav-item { color: #94a3b8; }
+.dark .nav-item:hover { color: #a5b4fc; background: rgba(129,140,248,0.1); }
+.dark .nav-item.is-active { background: linear-gradient(90deg, rgba(129,140,248,0.18) 0%, transparent 100%); color: #818cf8; border-left-color: #818cf8; }
+.nav-item.is-active i { color: inherit; }
+
+/* ==========================================
+   BOTTOM NAVIGATION (Mobile Only)
+   ========================================== */
+#bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 60px;
+    background: #ffffff;
+    border-top: 1px solid #e2e8f0;
+    z-index: 90;
+    justify-content: space-around;
+    align-items: center;
+    padding: 0 8px;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.06);
+}
+.dark #bottom-nav { background: #0f172a; border-top-color: rgba(255,255,255,0.06); }
+
+.bottom-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 6px 8px;
+    border-radius: 10px;
+    color: #94a3b8;
+    font-size: 10px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: color 0.18s ease, background 0.18s ease;
+    cursor: pointer;
+    border: none;
+    background: none;
+}
+.bottom-nav-item i { font-size: 16px; }
+.bottom-nav-item.is-active { color: #6366f1; }
+.dark .bottom-nav-item { color: #64748b; }
+.dark .bottom-nav-item.is-active { color: #818cf8; }
+
+/* ==========================================
+   HEADER
+   ========================================== */
+#main-header {
+    height: 60px;
+    background: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+    box-shadow: 0 1px 8px rgba(0,0,0,0.04);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 12px;
+}
+.dark #main-header { background: #0f172a; border-bottom-color: rgba(255,255,255,0.06); }
+
+@media (min-width: 640px) {
+    #main-header { height: 68px; padding: 0 24px; }
+}
+
+/* ==========================================
+   MAIN LAYOUT
+   ========================================== */
+#app-root {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+}
+#main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+}
+
+/* Content area: padding-bottom for mobile bottom nav */
+#content-area {
+    flex: 1;
+    overflow: auto;
+    padding: 16px;
+    height: 0; /* Force flex child to respect parent */
+    padding-bottom: 96px; /* room for bottom nav (60px) + shadow + breathing room */
+}
+@media (min-width: 640px) { #content-area { padding: 20px 24px; } }
+@media (min-width: 768px) { #content-area { padding-bottom: 20px; } } /* no bottom nav on tablet+ */
+
+/* ==========================================
+   BOARD VIEW — Responsive columns
+   ========================================== */
+#view-board {
+    display: flex;
+    gap: 16px;
+    /* Mobile: height auto so stacked columns expand freely;
+       #content-area scroll handles vertical overflow */
+    height: auto;
+    min-height: 100%;
+    align-items: flex-start;
+    flex-direction: column;
+    min-width: unset;
+}
+
+/* Mobile: columns are full-width, expand naturally (content-area scrolls) */
+.kanban-col {
+    width: 100%;
+    flex-shrink: 0;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    overflow: visible; /* allow cards to show fully on mobile */
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    background: #ffffff;
+    display: flex;
+    flex-direction: column;
+}
+.dark .kanban-col { background: rgba(22,33,54,0.92); border-color: rgba(99,102,241,0.12); }
+
+/* Task list: on mobile, expand to fit all cards — outer content-area scrolls */
+.task-list {
+    flex: 1;
+    overflow-y: visible;
+    padding: 12px;
+    padding-bottom: 16px;
+    min-height: 80px;
+}
+
+/* On mobile, last kanban column (Done) gets extra bottom clearance so
+   cards aren't hidden behind the fixed bottom nav */
+@media (max-width: 639px) {
+    .kanban-col:last-child .task-list {
+        padding-bottom: 24px;
+    }
+    .kanban-col:last-child {
+        margin-bottom: 8px;
+    }
+}
+
+/* Tablet: horizontal scroll with fixed width cards, contained scroll */
+@media (min-width: 640px) {
+    #view-board {
+        flex-direction: row;
+        min-width: max-content;
+        gap: 20px;
+    }
+    .kanban-col {
+        width: 300px;
+        max-height: 100%;
+        min-height: 200px;
+        overflow: hidden; /* restore clipping so inner task-list scrolls */
+    }
+    .task-list {
+        overflow-y: auto; /* inner column scroll on tablet+ */
+    }
+}
+@media (min-width: 1024px) {
+    .kanban-col { width: 320px; }
+}
+
+/* ==========================================
+   COLUMN HEADER
+   ========================================== */
+.col-header {
+    background: #ffffff;
+    border-bottom: 1px solid #f1f5f9;
+    padding: 14px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    /* sticky only makes sense when the column itself scrolls (tablet+) */
+    position: relative;
+    z-index: 10;
+}
+/* On tablet+, col-header sticks to top of its scrolling column */
+@media (min-width: 640px) {
+    .col-header { position: sticky; top: 0; }
+}
+.dark .col-header { background: rgba(22,33,54,0.98); border-bottom-color: rgba(99,102,241,0.1); }
+
+/* ==========================================
+   TASK CARDS
+   ========================================== */
+@keyframes slideUpCard {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.task-card {
+    cursor: grab;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+    will-change: transform;
+    background: #ffffff;
+    border: 1px solid #e8edf3;
+    border-radius: 12px;
+    touch-action: none; /* important for touch drag */
+    animation: slideUpCard 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.dark .task-card { background: #1e293b; border-color: rgba(99,102,241,0.12); }
+.task-card:active { cursor: grabbing; }
+
+/* Hover lift only on non-touch (pointer: fine) devices */
+@media (hover: hover) and (pointer: fine) {
+    .task-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px -4px rgba(99,102,241,0.15);
+    }
+    .dark .task-card:hover { box-shadow: 0 12px 28px -8px rgba(0,0,0,0.5); }
+}
+.task-card.completed .task-title { text-decoration: line-through; opacity: 0.45; }
+
+/* Show action buttons always on mobile (no hover) */
+.card-actions { opacity: 1; }
+@media (min-width: 768px) {
+    .card-actions {
+        opacity: 0;
+        transition: opacity 0.2s ease;
+    }
+    .task-card:hover .card-actions { opacity: 1; }
+}
+
+/* ==========================================
+   PRIORITY BADGES
+   ========================================== */
+.badge-high   { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+.badge-medium { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+.badge-low    { background: #fefce8; color: #a16207; border: 1px solid #fde68a; }
+.dark .badge-high   { background: rgba(220,38,38,0.15); color: #f87171; border-color: rgba(220,38,38,0.3); }
+.dark .badge-medium { background: rgba(234,88,12,0.15);  color: #fb923c; border-color: rgba(234,88,12,0.3); }
+.dark .badge-low    { background: rgba(202,138,4,0.15);  color: #fbbf24; border-color: rgba(202,138,4,0.3); }
+
+/* ==========================================
+   SORTABLE DRAG
+   ========================================== */
+.sortable-ghost {
+    opacity: 0.4;
+    background: #eef2ff !important;
+    border: 2px dashed #6366f1 !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+.dark .sortable-ghost { background: rgba(30,41,59,0.7) !important; border-color: #818cf8 !important; }
+.sortable-drag {
+    opacity: 1 !important;
+    cursor: grabbing !important;
+    box-shadow: 0 20px 50px -10px rgba(99,102,241,0.35) !important;
+    transform: scale(1.03) rotate(0.8deg) !important;
+}
+
+/* ==========================================
+   FOCUS MODE
+   ========================================== */
+.focus-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    padding: 16px;
+}
+.focus-card {
+    width: 100%;
+    max-width: 440px;
+    padding: 32px 24px;
+}
+.focus-circle-size {
+    width: 200px;
+    height: 200px;
+}
+@media (min-width: 480px) {
+    .focus-circle-size { width: 260px; height: 260px; }
+    .focus-card { padding: 40px; }
+}
+@media (min-width: 768px) {
+    .focus-circle-size { width: 288px; height: 288px; }
+}
+
+/* ==========================================
+   MODAL — Full screen on mobile
+   ========================================== */
+#task-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(15,23,42,0.45);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    display: none;
+    align-items: flex-end; /* bottom sheet on mobile */
+    justify-content: center;
+}
+@media (min-width: 640px) {
+    #task-modal { align-items: center; }
+}
+.modal-panel {
+    background: #ffffff;
+    width: 100%;
+    max-height: 95vh;
+    border-radius: 24px 24px 0 0;
+    padding: 20px;
+    overflow-y: auto;
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 -20px 60px rgba(0,0,0,0.15);
+}
+.dark .modal-panel { background: #1e293b; }
+
+@media (min-width: 640px) {
+    .modal-panel {
+        width: 90%;
+        max-width: 520px;
+        border-radius: 24px;
+        transform: scale(0.95);
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+        box-shadow: 0 25px 60px rgba(0,0,0,0.2);
+    }
+}
+
+#task-modal.is-open { display: flex; }
+#task-modal.is-open .modal-panel {
+    transform: translateY(0);
+    opacity: 1;
+}
+@media (min-width: 640px) {
+    #task-modal.is-open .modal-panel { transform: scale(1); }
+}
+
+/* ==========================================
+   DASHBOARD — Responsive grid
+   ========================================== */
+#view-dashboard { overflow-y: auto; }
+.dash-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+}
+@media (min-width: 640px) { .dash-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1024px) { .dash-grid { grid-template-columns: repeat(3, 1fr); } }
+
+/* ==========================================
+   TOAST NOTIFICATIONS
+   ========================================== */
+#toast-container {
+    position: fixed;
+    bottom: 72px; /* above bottom nav on mobile */
+    right: 16px;
+    z-index: 300;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+    max-width: calc(100vw - 32px);
+}
+@media (min-width: 768px) {
+    #toast-container { bottom: 24px; right: 24px; max-width: 380px; }
+}
+@keyframes toastIn {
+    from { transform: translateX(110%) scale(0.9); opacity: 0; }
+    to   { transform: translateX(0) scale(1); opacity: 1; }
+}
+@keyframes toastOut {
+    from { transform: translateX(0) scale(1); opacity: 1; }
+    to   { transform: translateX(110%) scale(0.9); opacity: 0; }
+}
+.toast-enter { animation: toastIn 0.4s cubic-bezier(0.175,0.885,0.32,1.275) forwards; }
+.toast-exit  { animation: toastOut 0.3s ease-in forwards; }
+
+/* ==========================================
+   GAMIFICATION WIDGET
+   ========================================== */
+.sidebar-gami-bg { background: #f8faff; border: 1px solid #e0e7ff; }
+.dark .sidebar-gami-bg { background: rgba(99,102,241,0.1); border-color: rgba(99,102,241,0.15); }
+
+/* ==========================================
+   SEARCH BAR
+   ========================================== */
+.search-input-wrap { position: relative; }
+.search-input-wrap input {
+    width: 160px;
+    transition: width 0.3s ease;
+}
+@media (min-width: 640px) { .search-input-wrap input { width: 220px; } }
+@media (min-width: 1024px) { .search-input-wrap input { width: 280px; } }
+.search-input-wrap input:focus { width: 260px; }
+@media (min-width: 1024px) { .search-input-wrap input:focus { width: 320px; } }
+
+/* ==========================================
+   FOCUS CIRCLE (responsive SVG)
+   ========================================== */
+.shadow-glow { filter: drop-shadow(0 0 14px rgba(99,102,241,0.55)); }
+
+/* ==========================================
+   PRINT: clean output
+   ========================================== */
+@media print {
+    #sidebar, #bottom-nav, #main-header, #task-modal { display: none !important; }
+    #content-area { overflow: visible; height: auto; padding: 0; }
+}
