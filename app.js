@@ -15,6 +15,7 @@ const App = {
             tasksCompleted: 0
         },
         editingTaskId: null,
+        taskToDeleteId: null,
         // Focus Mode State
         focusTask: null,
         focusTimer: null,
@@ -174,6 +175,11 @@ const App = {
             btnModalClose: document.getElementById('close-modal-btn'),
             btnModalCancel: document.getElementById('cancel-modal-btn'),
 
+            // Delete Modal
+            deleteModal: document.getElementById('delete-modal'),
+            btnConfirmDelete: document.getElementById('confirm-delete-btn'),
+            btnCancelDelete: document.getElementById('cancel-delete-btn'),
+
             // Gamification
             wlLevel: document.getElementById('user-level'),
             wlStreak: document.getElementById('user-streak'),
@@ -244,6 +250,17 @@ const App = {
         this.dom.btnModalCancel.addEventListener('click', () => this.closeModal());
         this.dom.modal.addEventListener('click', (e) => {
             if (e.target === this.dom.modal) this.closeModal();
+        });
+
+        // ---- Delete Modal ----
+        this.dom.btnCancelDelete.addEventListener('click', () => this.closeDeleteModal());
+        this.dom.deleteModal.addEventListener('click', (e) => {
+            if (e.target === this.dom.deleteModal) this.closeDeleteModal();
+        });
+        this.dom.btnConfirmDelete.addEventListener('click', () => {
+            if (this.state.taskToDeleteId) {
+                this.executeDeleteTask(this.state.taskToDeleteId);
+            }
         });
 
         // ---- Task Form ----
@@ -350,6 +367,7 @@ const App = {
     initSortable() {
         const options = {
             group: 'shared',
+            sort: false, // Disable reordering within the same column
             animation: 150,
             ghostClass: 'sortable-ghost',
             dragClass: 'sortable-drag',
@@ -375,8 +393,11 @@ const App = {
 
                     await this._saveTask(task);
                     this.updateCounts();
-                    this.renderBoard();
                 }
+                
+                // Always re-render to enforce strict chronological sorting order,
+                // forcing the UI to snap back to the correct order if visually dragged within the same column.
+                this.renderBoard();
             }
         };
 
@@ -406,10 +427,10 @@ const App = {
             );
         }
 
-        const priorityScore = { high: 3, medium: 2, low: 1 };
         filteredTasks.sort((a, b) => {
             if (a.pinned !== b.pinned) return b.pinned ? 1 : -1;
-            return priorityScore[b.priority] - priorityScore[a.priority];
+            // Sort by creation time so newer tasks are at the bottom and are not dragged upward
+            return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
         });
 
         filteredTasks.forEach(task => {
@@ -451,6 +472,11 @@ const App = {
                 <i class="fa-regular fa-clock"></i> <span>${this.formatDate(task.deadline)}</span>
             </div>` : '';
 
+        const createdAtDate = new Date(task.createdAt || Date.now());
+        const timeHtml = `<div class="flex items-center gap-1 text-[10px] text-slate-400 dark:text-slate-500 font-medium ${task.deadline ? 'mt-1' : ''}">
+            <i class="fa-solid fa-clock-rotate-left"></i> <span>Added ${this.formatDate(task.createdAt || new Date().toISOString())} ${createdAtDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+        </div>`;
+
         const pinIcon = task.pinned
             ? '<i class="fa-solid fa-thumbtack text-primary text-xs transform rotate-45"></i>'
             : '<i class="fa-solid fa-thumbtack text-slate-300 dark:text-slate-600 text-xs"></i>';
@@ -477,8 +503,9 @@ const App = {
             </div>
 
             <div class="flex items-center justify-between pt-2 mt-1 border-t border-slate-100 dark:border-slate-700/50 gap-2">
-                <div class="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 font-medium min-w-0 truncate">
+                <div class="flex flex-col min-w-0 truncate">
                     ${deadlineHtml}
+                    ${timeHtml}
                 </div>
                 <div class="flex items-center gap-1 ml-auto flex-shrink-0">
                     <button class="action-focus w-7 h-7 rounded-lg bg-indigo-50 dark:bg-slate-700 text-primary hover:bg-primary hover:text-white transition-colors flex items-center justify-center text-xs" title="Focus on task">
@@ -524,6 +551,16 @@ const App = {
         this.dom.modal.classList.remove('is-open');
         this.dom.taskForm.reset();
         this.state.editingTaskId = null;
+    },
+
+    openDeleteModal(id) {
+        this.state.taskToDeleteId = id;
+        this.dom.deleteModal.classList.add('is-open');
+    },
+
+    closeDeleteModal() {
+        this.dom.deleteModal.classList.remove('is-open');
+        this.state.taskToDeleteId = null;
     },
 
     async saveTaskFromForm() {
@@ -574,25 +611,29 @@ const App = {
         this.closeModal();
     },
 
-    async deleteTask(id) {
-        if (confirm('Are you sure you want to delete this task?')) {
-            const task = this.state.tasks.find(t => t.id === id);
-            if (task) {
-                // Soft-delete: mark deleted + unsynced so Supabase learns about it
-                task.deleted = true;
-                await this._saveTask(task);
-            }
-            // Remove from in-memory list so it's hidden immediately
-            this.state.tasks = this.state.tasks.filter(t => t.id !== id);
-            this.renderBoard();
-            this.showToast('Task deleted', 'info');
+    deleteTask(id) {
+        this.openDeleteModal(id);
+    },
 
-            if (this.state.focusTask && this.state.focusTask.id === id) {
-                this.resetFocusTimer();
-                this.dom.focusTitle.textContent = 'No task selected for focus.';
-                this.state.focusTask = null;
-            }
+    async executeDeleteTask(id) {
+        const task = this.state.tasks.find(t => t.id === id);
+        if (task) {
+            // Soft-delete: mark deleted + unsynced so Supabase learns about it
+            task.deleted = true;
+            await this._saveTask(task);
         }
+        // Remove from in-memory list so it's hidden immediately
+        this.state.tasks = this.state.tasks.filter(t => t.id !== id);
+        this.renderBoard();
+        this.showToast('Task deleted', 'info');
+
+        if (this.state.focusTask && this.state.focusTask.id === id) {
+            this.resetFocusTimer();
+            this.dom.focusTitle.textContent = 'No task selected for focus.';
+            this.state.focusTask = null;
+        }
+
+        this.closeDeleteModal();
     },
 
     editTask(id) {

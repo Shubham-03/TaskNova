@@ -89,7 +89,8 @@
                 </div>
                 <p
                     class="text-[10px] text-right text-slate-400 dark:text-slate-500 font-semibold uppercase tracking-widest">
-                    <span id="user-points">0</span> / 100 pt</p>
+                    <span id="user-points">0</span> / 100 pt
+                </p>
             </div>
         </aside>
 
@@ -299,6 +300,21 @@
             <span class="text-primary">Add</span>
         </button>
     </nav>
+
+    <!-- ======== DELETE CONFIRM MODAL ======== -->
+    <div id="delete-modal">
+        <div class="modal-panel text-center" style="max-width: 400px;">
+            <div class="w-16 h-16 rounded-full bg-red-50 dark:bg-red-900/20 text-red-500 mx-auto flex items-center justify-center text-2xl mb-5 mt-2">
+                <i class="fa-solid fa-trash-can"></i>
+            </div>
+            <h3 class="text-xl font-extrabold text-slate-800 dark:text-white mb-2">Delete Task?</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mb-7">This action cannot be undone. Are you sure you want to permanently delete this task?</p>
+            <div class="flex flex-col sm:flex-row gap-3 justify-center mb-2">
+                <button type="button" id="cancel-delete-btn" class="px-6 py-3 rounded-xl text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors font-semibold text-sm w-full sm:w-1/2">Cancel</button>
+                <button type="button" id="confirm-delete-btn" class="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-xl shadow-lg shadow-red-500/30 transition-all font-bold text-sm w-full sm:w-1/2">Yes, Delete</button>
+            </div>
+        </div>
+    </div>
 
     <!-- ======== TASK MODAL ======== -->
     <div id="task-modal">

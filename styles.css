@@ -425,7 +425,7 @@ body {
 /* ==========================================
    MODAL — Full screen on mobile
    ========================================== */
-#task-modal {
+#task-modal, #delete-modal {
     position: fixed;
     inset: 0;
     z-index: 200;
@@ -437,7 +437,7 @@ body {
     justify-content: center;
 }
 @media (min-width: 640px) {
-    #task-modal { align-items: center; }
+    #task-modal, #delete-modal { align-items: center; }
 }
 .modal-panel {
     background: #ffffff;
@@ -463,13 +463,13 @@ body {
     }
 }
 
-#task-modal.is-open { display: flex; }
-#task-modal.is-open .modal-panel {
+#task-modal.is-open, #delete-modal.is-open { display: flex; }
+#task-modal.is-open .modal-panel, #delete-modal.is-open .modal-panel {
     transform: translateY(0);
     opacity: 1;
 }
 @media (min-width: 640px) {
-    #task-modal.is-open .modal-panel { transform: scale(1); }
+    #task-modal.is-open .modal-panel, #delete-modal.is-open .modal-panel { transform: scale(1); }
 }
 
 /* ==========================================
